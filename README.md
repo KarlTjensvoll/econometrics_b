@@ -1,5 +1,5 @@
-# week1_exAnte
-EconB 2020 Week1 ex ante excercises
+# linear_04_05
+EconB 2020
 
 This repository has the necessary files to do the exercises. At the end of the day, I will upload an ex_post folder.
 
