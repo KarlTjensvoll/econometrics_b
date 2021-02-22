@@ -32,15 +32,15 @@ def system_2sls(y: list, x: list, z: list) -> dict:
         x_predicted[:, i] = first_stage(y[i], x[i], z[i])
     
     # Reshape the x_predicted into a single column
-    x_predicted = None # FILL IN
+    x_predicted = x_predicted.reshape(-1, 1)
 
-    b_hat = None  # Estimate the second step
-    residual = None  # Calculate residuals (use x and not xhat)
-    SSR = None  # Calculate SSR
-    sigma2 = None  # Calculate sigma2 With 1/(n-k) adjustment
-    cov = None  # Calculate covariance
-    se = None # Calculate standard errors
-    t_values = None # Calculate t-values
+    b_hat = lm.est_ols(y[-1], x_predicted)
+    residual = y[-1] - x[-1] @ b_hat
+    SSR = residual.T @ residual
+    sigma2 = SSR/(y[-1].size - x[-1].shape[1])
+    cov = sigma2 * la.inv(x[-1].T @ x[-1])
+    se = np.sqrt(cov.diagonal()).reshape(-1, 1)
+    t_values = b_hat/se
     
     results = [b_hat, se, sigma2, t_values, np.array(0)]
     names = ['b_hat', 'se', 'sigma2', 't_values', 'R2']
