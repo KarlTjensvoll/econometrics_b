@@ -66,7 +66,43 @@ def first_stage(y: np.array, x: np.array, z: np.array) -> np.array:
     pass
 
 
-def sequential_instruments(x:np.array, T:int) -> np.array:
+def est_gmm(
+        W: np.array, y: np.array, x: np.array, z: np.array, 
+        t: int, step=1
+    ) -> np.array:
+    
+    n = int(y.size/t)
+    k = x.shape[1]
+    s = 0
+    while s<step:
+        b_hat = la.inv(x.T@z@W@z.T@x)@x.T@z@W@z.T@y
+        residual = y - x@b_hat
+
+        if s==0:
+            cov, se = lm.robust(z@W@z.T@x, residual, t)
+        else:
+            se = np.sqrt(
+                la.inv(x.T@z@W@z.T@x).diagonal()
+                ).reshape(-1, 1)
+
+        W = np.zeros((W.shape[0], W.shape[1]))
+        for i in range(n):
+            slice_ob = slice(i*t, (i + 1)*t)
+            zi = z[slice_ob]
+            resi = residual[slice_ob]
+            W += zi.T@(resi@resi.T)@zi
+        W = la.inv(W)
+        J = residual.T@ z@W@z.T @residual
+        sigma2 = (residual.T @ residual)/(t*n - k)
+        t_values = b_hat/se
+        s += 1
+
+    results = [b_hat, se, sigma2, t_values, np.array(0), J]
+    names = ['b_hat', 'se', 'sigma2', 't_values', 'R2', 'J']
+    return dict(zip(names, results))
+
+
+def sequential_instruments(x:np.array, T:int):
     """Takes x, and creates the instrument matrix.
 
     Args:
@@ -80,26 +116,28 @@ def sequential_instruments(x:np.array, T:int) -> np.array:
         have used all instruments available each time period.
     """
 
-    # Create some helper variables
     n = int(x.shape[0]/(T - 1))
     k = x.shape[1]
-    
-    # Initialize the Z matrix, that we will fill up using the loop.
     Z = np.zeros((n*(T - 1), int(k*T*(T - 1) / 2)))
 
-    # I recommend using two loops:
-    # First loops over the persons.
-        # It can be a good idea to make a temporary variable, where you retreive
-        # the observations we have for that person, that makes it easier in the
-        # next loop.
-    
-    # Second loops over the time periods for that person.
-        # Here you should therefore for the first time period get only one
-        # instrument. Then for the second time period get two instruments. etc.
-    
-    
-    # So for each person, you should get a matrix that looks like Zo from the
-    # Part 3 text. You should then stack these on top of each other, so that
-    # so that you get a very tall matrix.
-    
+    # Loop through all persons, and then loop through their time periods.
+    # If first time period, use only that as an instrument.
+    # Second time period, use the first and this time period as instrument, etc. 
+    # Second last time period (T-1)
+
+    # Loop over each individual, we take T-1 steps.
+    for i in range(0, n*(T - 1), T - 1):
+        # We make some temporary arrays for the current individual
+        zi = np.zeros((int(k*T*(T - 1) / 2), T - 1))
+        xi = x[i: i + T - 1]
+
+        # j is a help variable on how many instruments we create each period.
+        # The first period have 1 iv variable, the next have 2, etc.
+        j = 0
+        for t in range(1, T):
+            zi[j: (j + t), t - 1] = xi[:t].reshape(-1, )
+            j += t
+        # It was easier to fill the instruments row wise, so we need to transpose
+        # the individual matrix before we add it to the main matrix.
+        Z[i: i + T - 1] = zi.T
     return Z
