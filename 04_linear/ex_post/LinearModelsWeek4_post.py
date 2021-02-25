@@ -46,13 +46,12 @@ def estimate(
     SST = (y - np.mean(y)).T@(y - np.mean(y))
     R2 = 1 - SSR/SST
 
-    # Here we need to replace the x variable, since we do not want to pass
-    # either x nor z to the variance/robust function, but rather we want to
-    # pass it x-hat.
+    # If estimating piv, transform x before we calculating variance:
     if len(args) == 3:
-        # FILL IN
-        # Should replace x with x-hat
-        pass  # For now use this, so that rest of function works.
+        z = args[2]
+        Pz = z@la.inv(z.T@z)@z.T
+        x = Pz@x
+        R2 = np.array(0)
 
     sigma2, cov, se = variance(transform, SSR, x, t)
     if robust_se:
@@ -89,10 +88,8 @@ def est_piv( y: np.array, x: np.array, z: np.array) -> np.array:
     Returns:
         np.array: Estimated beta coefficients.
     """
-    # FILL IN
-    # Should return b_hat from a PIV estimation.
-    Pz = z @ la.inv(z.T @ z) @ z.T
-    return la.inv(x.T @ Pz @ x) @ (x.T @ Pz @ y)
+    Pz = z@la.inv(z.T@z)@z.T
+    return la.inv(x.T@Pz@x)@(x.T@Pz@y)
 
 def variance( 
         transform: str, 
@@ -146,7 +143,7 @@ def variance(
 
 
 def robust( x: np.array, residual: np.array, t:int) -> tuple:
-    # If only cross sectinoal, we can easily use the diagonal.
+    # If only cross sectinoal, we can easiily use the diagonal.
     if not t:
         uhat2 = residual * residual
         diag = np.diag(uhat2.reshape(-1, ))
@@ -245,3 +242,87 @@ def perm( Q_T: np.array, A: np.array, t=0) -> np.array:
     for i in range(int(A.shape[0]/t)):
         Z = np.vstack((Z, Q_T@A[i*t: (i + 1)*t]))
     return Z
+
+
+
+def perm_general(Q_T, A, t, n):
+    # Q_T rows tells us if any rows are lost.
+    if Q_T.shape[0] != t:
+        t_z = Q_T.shape[0]
+    else:
+        t_z = t
+    Z = np.zeros((n*t_z, A.shape[1]))
+    for i in range(n):
+        zi = Q_T@A[i*t: (i + 1)*t]
+        Z[i*t_z: (i + 1)*t_z] = zi
+    return Z
+
+
+def zstex(Z0, n, t):
+    k = Z0.shape[1]
+    A = Z0.T.reshape(t*k, n, order='F').T
+    Z = np.zeros((n*(t - 1), (t - 1)*t*k))
+    for i in range(n):
+        zi = np.kron(np.eye(t - 1), A[i])
+        Z[i*(t - 1): (i + 1)*(t - 1)] = zi
+    return Z
+
+
+def zpred(Z0, n, t):
+    k = Z0.shape[1]
+    Z = np.zeros((n*(t - 1), int((t - 1)*t*k/2)))
+    dt = np.arange(t).reshape(-1, 1)
+    
+    for i in range(n):
+        zi = np.zeros((t - 1, int(t*(t - 1)*k/2)))
+        z0i = Z0[i*t: (i + 1)*t - 1]
+        
+        a = 0
+        for j in range(1, t):
+            dk = dt[dt < j].reshape(-1, 1)
+            b = dk.shape[0]*Z0.shape[1]
+            zit = z0i[dk].T.reshape(1, b, order='F')
+            zi[j - 1, a: a + b] = zit
+            a += b
+        Z[i*(t - 1): (i + 1)*(t - 1)] = zi
+    return Z
+
+
+def load_example_data():
+    # First, import the data into numpy.
+    data = np.loadtxt('wagepan.txt', delimiter=",")
+    id_array = np.array(data[:, 0])
+
+    # Count how many persons we have. This returns a tuple with the 
+    # unique IDs, and the number of times each person is observed.
+    unique_id = np.unique(id_array, return_counts=True)
+    n = unique_id[0].size
+    t = int(unique_id[1].mean())
+    year = np.array(data[:, 1], dtype=int)
+
+    # Load the rest of the data into arrays.
+    y = np.array(data[:, 8]).reshape(-1, 1)
+    x = np.array(
+        [np.ones((y.shape[0])),
+            data[:, 2],
+            data[:, 4],
+            data[:, 6],
+            data[:, 3],
+            data[:, 9],
+            data[:, 5],
+            data[:, 7]]
+    ).T
+
+    # Lets also make some variable names
+    label_y = 'Log wage'
+    label_x = [
+        'Constant',
+        'Black',
+        'Hispanic',
+        'Education',
+        'Experience',
+        'Experience sqr',
+        'Married',
+        'Union'
+    ]
+    return y, x, n, t, year, label_y, label_x

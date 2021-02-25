@@ -3,36 +3,22 @@ from numpy import linalg as la
 import LinearModelsWeek5 as lm
 
 
-def system_2sls(y: list, x: list, z: list) -> dict:
-    """Takes a list of the y, x and z arrays that we perform a system 2SLS
-    regression on. The last element of y and x list be the array with all
-    observations.
-
-    Args:
-        >> y (list): A list of arrays, where each array are all individuals
-        for one time period. The last array should be all individuals for 
-        all time periods.
-        >>x (list): A list of arrays, where each array are all individuals
-        for one time period. The last array should be all individuals for 
-        all time periods.
-        z (list): A list of arrays, where each array are all individuals
-        for one time period. This should not have an extra array with all 
-        individuals for all time periods.
-
-    Returns:
-        dict: Returns a dictionary witht he results from S2SLS.
-    """
+def system_2sls(y: list, x: list, z: list):
     # Intialize som helper variables
     n_rows = z[0].shape[0]
     n_cols = len(z)
 
     # Initialize the arrays to fill from first_stage loop
     x_predicted = np.zeros((n_rows, n_cols))
+    residual_column = np.zeros((n_rows, n_cols))
     for i in range(n_cols):
-        x_predicted[:, i] = first_stage(y[i], x[i], z[i])
+        x_predicted[:, i], residual_column[:, i] = first_stage(y[i], x[i], z[i])
     
-    # Reshape the x_predicted into a single column
+    # Reshape into one column. Since we use 'C' - ordering, the last index
+    # changes the fastest. This ensures that the predicted column should
+    # have the correct ordering of persons and time periods.
     x_predicted = x_predicted.reshape(-1, 1)
+    residual = residual_column.reshape(-1, 1)
 
     b_hat = lm.est_ols(y[-1], x_predicted)
     residual = y[-1] - x[-1] @ b_hat
@@ -47,25 +33,14 @@ def system_2sls(y: list, x: list, z: list) -> dict:
     return dict(zip(names, results))
 
 
-def first_stage(y: np.array, x: np.array, z: np.array) -> np.array:
-    """Perform the first stage regression of x on z. Then uses y to create
-    the predictions x-hat
-
-    Args:
-        >> y (np.array): An array that have all individuals, but for one time 
-        period only.
-        >> x (np.array): An array that have all individuals, but for one time 
-        period only.
-        >> z (np.array): An array that have all individuals, but for one time 
-        period only.
-
-    Returns:
-        np.array: The predicted x-hats.
-    """
+def first_stage(y: np.array, x: np.array, z: np.array):
     b_hat = lm.est_ols(x, z)
-    
+
+    # We use the predictions in the second stage. 
+    # The residuals are needed for estimating the variance.
     x_predictions = z @ b_hat
-    return x_predictions.flatten()
+    residuals = y - x_predictions
+    return x_predictions.flatten(), residuals.flatten()
 
 
 def est_gmm(
@@ -99,7 +74,7 @@ def est_gmm(
         t_values = b_hat/se
         s += 1
 
-    results = [b_hat, se, sigma2, t_values, np.array(np.nan), J]
+    results = [b_hat, se, sigma2, t_values, np.array(0), J]
     names = ['b_hat', 'se', 'sigma2', 't_values', 'R2', 'J']
     return dict(zip(names, results))
 

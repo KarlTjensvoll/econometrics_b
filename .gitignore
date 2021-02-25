@@ -142,6 +142,8 @@ dmypy.json
 # profiling data
 .prof
 
+# Own 
 .DS_Store
+__pychache__/
 
 # End of https://www.toptal.com/developers/gitignore/api/python
